@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: "Periodically put a random value into AWS Parameter Store"
+
+Parameters:
+
+  Rate:
+    Description: "A CloudWatch rate expression to schedule the insert"
+    Type: "String"
+    Default: "1 minute"
+
+  Key:
+    Description: "The Systems Manager Parameter Store key where the value will be stored (no leading '/')"
+    Type: "String"
+    Default: "parameter-rando"
+
+Resources:
+
+  # IAM role for Lambda function
+  LambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: "allow-put-param"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: ["ssm:PutParameter"]
+                Resource: [!Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Key}"]
+
+  # Lambda function to put parameter
+  LambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: !Sub |
+          from os import environ
+          from uuid import uuid4
+          from boto3 import client
+          def lambda_handler(event, context):
+              value = str(uuid4())
+              client('ssm').put_parameter(
+                  Name=environ['PARAM_STORE_KEY'],
+                  Value=value,
+                  Overwrite=True,
+                  Type='String',
+                  Description='random value provided by parameter-rando'
+              )
+              return True
+      Description: "put a random value to AWS Systems Manager Parameter Store"
+      Handler: "index.lambda_handler"
+      MemorySize: 128
+      Role: !GetAtt ["LambdaRole", "Arn"]
+      Runtime: "python3.6"
+      Timeout: 10
+      Environment:
+        Variables:
+          PARAM_STORE_KEY: !Ref "Key"
+
+  # CloudWatch Events schedule
+  CloudWatchSchedule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: "Schedule for parameter-rando"
+      ScheduleExpression: !Sub "rate(${Rate})"
+      State: "ENABLED"
+      Targets:
+        - Arn: !GetAtt ["LambdaFunction", "Arn"]
+          Id: "parameter-rando-schedule"
+
+  # Permissions for CloudWatch to invoke Lambda function
+  CloudWatchPermissions:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref "LambdaFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ["CloudWatchSchedule", "Arn"]
+

@@ -26,12 +26,12 @@ There may be other use cases (let me know!), but those decribed above were the
 primary motivation for this project.
 
 ### Installation
-1. Create a new CloudFormation with the template at cloud-formation.yml.
+1. Create a new CloudFormation stack with the template at cloud-formation.yml.
 2. Profit.
 
 ### Usage
 1. Place a parameter of type ```AWS::SSM::Parameter::Value<String>``` in your 
-   CloudFormation template. This parameter should references the Parameter Rando
+   CloudFormation template. This parameter should reference the Parameter Rando
    key in Parameter Store (this is defined when you install Parameter Rando, 
    and defaults to ```parameter-rando```)
 2. Use that parameter wherever you need a value that will frequently change.
